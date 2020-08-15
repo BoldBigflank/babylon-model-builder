@@ -1,3 +1,17 @@
+# Babylon Model Builder
+
+## Expected Behavior
+Hit a key (C) to create a new polygon, then click around a canvas. End it by clicking the first point.
+Modify a polygon's points by selecting a polygon then grabbing and moving each point.
+Delete a polygon by hitting a key (del)
+Hit Render button to pull polygons and render in BabylonJS
+
+Interacting with a different canvas will end any polygons being created.
+Points snap to the nearest integer
+Copy the output for using in JS13KGames
+
+
+
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
 ## Available Scripts
