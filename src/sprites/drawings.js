@@ -5,21 +5,65 @@ const modes = {
 }
 
 const dotSprite = {
+    type: 'dot',
     anchor: {x: 0.5, y: 0.5},
     color: '#ffffff',
     width: 10,
-    height: 10
+    height: 10,
+    onDown() {
+        this.selected = true
+        this.parent.dragging = true
+    },
+    onUp() {
+        this.selected = false
+    },
+
+    // Overrides
+    collidesWithPointer: function (pointer) {
+        if (this.parent.dragging) return false
+        const { x, y, width, height, anchor } = this
+        const adjX = x - anchor.x * width
+        const adjY = y - anchor.y * height
+        return (
+            pointer.x > adjX &&
+            pointer.y > adjY &&
+            pointer.x < adjX + width &&
+            pointer.y < adjY + height
+        )
+    },
+    update() {
+        this.color = (this.last && this.parent.last) ? '#f0ad4e' : '#ffffff'
+    }
 }
 
 const polygonSprite = {
+    type: 'polygon',
+    last: false,
     x: 0,
     y: 0,
     addDot(coord) {
+        this.children.filter((child) => child.type === 'dot').forEach((dot) => dot.last = false)
         const dot = Sprite(dotSprite)
         dot.position.x = coord.x
         dot.position.y = coord.y
+        if (this.last) dot.last = true
         // else add dot to the current one
+        track(dot)
         this.addChild(dot)
+        return dot
+    },
+    moveSelected(coord) {
+        const { x, y } = coord
+        this.children.filter((child) => child.type === 'dot' && child.selected).forEach((dot) => {
+            dot.x = x
+            dot.y = y
+        })
+    },
+    moveEnded() {
+        this.children.filter((child) => child.type === 'dot').forEach((dot) => {
+            dot.selected = false
+        })
+        this.dragging = false
     },
     toObject() {
         const points = this.children.map((dot) => {
@@ -38,12 +82,18 @@ const polygonSprite = {
         context.lineWidth = 3
 
         context.beginPath()
+        let startDot
         this.children.forEach((dot, i) => {
             const { x, y } = dot
-            if (i === 0) context.moveTo(x, y)
+            if (i === 0) {
+                startDot = dot
+                context.moveTo(x, y)
+            }
             else context.lineTo(x, y)
         })
+        if (startDot) context.lineTo(startDot.x, startDot.y)
         context.fill()
+        context.stroke()
         context.restore()
 
         this.draw()
@@ -67,6 +117,14 @@ const drawingSprite = {
         }
     },
 
+    addPolygon: function() {
+        this.children.filter((child) => child.type === 'polygon').forEach((polygon) => polygon.last = false)
+        const polygon = Sprite(polygonSprite)
+        polygon.last = true
+        this.addChild(polygon)
+        return polygon
+    },
+
     toObject: function() {
         const polygons = this.children.map((polygon) => {
             return polygon.toObject()
@@ -87,17 +145,16 @@ const drawingSprite = {
                 // Add a point to an existing polygon
                 polygon = this.children[this.children.length - 1]
                 if (!polygon) {
-                    polygon = Sprite(polygonSprite)
-                    this.addChild(polygon)
+                    polygon = this.addPolygon()
                 }
                 polygon.addDot(coord)
                 break
             case modes.NEW:
                 // Start a new polygon at a point
-                polygon = Sprite(polygonSprite)
+                polygon = this.addPolygon()
                 polygon.addDot(coord)
                 this.addChild(polygon)
-                // Set the mode to add
+                // Set the mode to addyarn start
                 this.parent.mode = modes.ADD
                 break;
             case modes.NONE:
@@ -108,13 +165,21 @@ const drawingSprite = {
         }
     },
     onUp: function() {
-        this.selected = false
+        this.children.filter((view) => view.type === 'polygon').forEach((polygon) => {
+            polygon.moveEnded()
+        })
     },
     onOver: function(event) {
-        // console.log('onOver', this.color)
+        const coord = this.toCoord(event)
+        // Move any selected dots to the cursor
+        this.children.filter((view) => view.type === 'polygon').forEach((polygon) => {
+            polygon.moveSelected(coord)
+        })
     },
     onOut: function() {
-        this.selected = false
+        this.children.filter((view) => view.type === 'polygon').forEach((polygon) => {
+            polygon.moveEnded()
+        })
     },
 
 
