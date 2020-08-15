@@ -24,21 +24,29 @@ export default class ModelBuilder extends React.Component {
     
     componentDidMount() {
         // Start KontraJS stuff
-        let { canvas, context } = init('drawCanvas')
+        init('drawCanvas')
         initPointer()
         
         // y o
         // z x
+        
+
         const xView = Sprite(viewSprite)
-        xView.position.x = 256
-        xView.position.y = 256
-        
-        const yView = Sprite(viewSprite)
-        yView.color = '#99FF99'
-        
-        const zView = Sprite(viewSprite)
-        zView.position.y = 256
-        zView.color = '#9999FF'
+        xView.x = 256
+        xView.y = 256
+
+        // const xView = Sprite(Object.assign({}, viewSprite, {
+        //     x: 256,
+        //     y: 256
+        // }))
+        const yView = Sprite(Object.assign({}, viewSprite, {
+            color: '#99ff99'
+        }))
+        const zView = Sprite(Object.assign({}, viewSprite, {
+            y: 256,
+            color: '#9999ff'
+        }))
+
         track(xView, yView, zView)
 
         this.sprites.push(xView, yView, zView)
@@ -83,29 +91,29 @@ export default class ModelBuilder extends React.Component {
         if (this.mesh) this.mesh.dispose()
         // TODO: Gather the 3 axis canvases
         // TODO: Build and render a babylonjs model
-        const xPolygons = this.editorViews.xView.getPolygons()
-        const yPolygons = this.editorViews.yView.getPolygons()
-        const zPolygons = this.editorViews.zView.getPolygons()
-        console.log('renderModel', xPolygons)
-        // [[{x,y}, {x,y}, {x,y}], [{x,y}, {x,y}, {x,y}]]
+        const xPolygons = this.editorViews.xView.toObject()
+        const yPolygons = this.editorViews.yView.toObject()
+        const zPolygons = this.editorViews.zView.toObject()
+        
+        const model = [xPolygons, zPolygons, yPolygons]
         
         // Make 3 models by extruding each drawing
-        // Convert to 
-        const mesh = this.createPuzzle([xPolygons, zPolygons, yPolygons], this.shapeMat, this.scene)
+        const mesh = this.createModel(model, this.shapeMat, this.scene)
         mesh.position.y = 4
         mesh.scaling = new Vector3(8, 8, 8)
         this.mesh = mesh
-
+        
+        this.setState({
+            'renderOutput': JSON.stringify(model)
+        })
     }
 
-    createPuzzle(shapeArrays, shapeMat, scene) {
+    createModel(shapes, shapeMat, scene) {
         var axes = ['x', 'z', 'y']
         var shapeMeshes = []
-        var shapeCSGs = []
-        var resultMeshes = []
-        // Make a mesh from each of the shapeArrays
-        shapeArrays.forEach((shape, i) => {
-            var shapeMesh = this.CreatePuzzleShape(shape, axes[i], scene)
+        // Make a mesh from each of the shapes
+        shapes.forEach((shape, i) => {
+            var shapeMesh = this.createShapeMesh(shape, axes[i], scene)
             shapeMeshes.push(shapeMesh)
         })
         // Make CSG from each
@@ -119,42 +127,13 @@ export default class ModelBuilder extends React.Component {
             }
         })
 
-        const resultMesh = resultCSG.toMesh('Result-Mesh', this.shapeMat, scene, true)
+        const resultMesh = resultCSG.toMesh('Result-Mesh', shapeMat, scene, true)
         shapeMeshes.forEach((mesh) => mesh.dispose())
         return resultMesh
-
-        // Use a box to split it into four chunks
-        var topStamp = MeshBuilder.CreateBox('Box-Stamp', {
-            size: 0.52
-        }, scene)
-
-        var positions = [
-            scaledVector3(0.25, 0.25, 0.25, 1),
-            scaledVector3(-0.25, 0.25, -0.25, 1),
-            scaledVector3(0.25, -0.25, -0.25, 1),
-            scaledVector3(-0.25, -0.25, 0.25, 1)
-        ]
-
-
-        positions.forEach((pivotPoint, i) => {
-            topStamp.position = pivotPoint
-            let shapeCSG = resultCSG.intersect(CSG.FromMesh(topStamp))
-            var shapeMesh = shapeCSG.toMesh('Grabbable-Puzzle-' + i, shapeMat, scene, true)
-            // Move the pivot to teh right spot
-            shapeMesh.setPivotPoint(pivotPoint)
-            resultMeshes.push(shapeMesh)
-        })
-        // resultMeshes.push(resultCSG.toMesh('Grabbable-Test-Shape', shapeMat, scene, false))
-        topStamp.dispose()
-        shapeMeshes.forEach((mesh) => mesh.dispose())
-        // Every puzzle will do the same four blocks
-        // return an array of meshes with their pivot point set
-        return resultMeshes
     }
 
-    
-    CreatePuzzleShape = (shapeObject, axis, scene) => {
-        let puzzle = shapeObject.points
+    createShapeMesh = (shapeObject, axis, scene) => {
+        let puzzle = shapeObject.polygons
         axis = axis || 'y'
         let meshes = []
         // Assume a max grid size of 32x32
@@ -198,12 +177,14 @@ export default class ModelBuilder extends React.Component {
                     <div className="canvasContainer">
                         <canvas id="drawCanvas" width={512} height={512}></canvas>
                     </div>
-                    <canvas id="renderCanvas" width={512} height={512} ></canvas><br/>
+                    <div className="canvasContainer">
+                        <canvas id="renderCanvas" width={512} height={512} ></canvas>
+                    </div>
                     <button onClick={() => this.renderModel()}>Render</button>
                 </div>
                 <div className="Output">
                     <p>Output</p>
-                    <textarea></textarea>
+                    <textarea value={this.state.renderOutput}></textarea>
                 </div>
             </div>
         )

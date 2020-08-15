@@ -1,10 +1,11 @@
 .ModelBuilder {
-    max-width:720px;
+    /* max-width:720px; */
     margin: 0px auto;
     text-align:center;
 }
 canvas#renderCanvas {
-  border: 1px solid black;
+    display: block;
+    border: 1px solid black;
 }
 
 .canvasContainer {
@@ -14,7 +15,7 @@ canvas#renderCanvas {
 }
 
 canvas#drawCanvas {
-  max-width: 512px;
-  display: block;
-  width: 100%;
+    max-width: 512px;
+    display: block;
+    width: 100%;
 }
