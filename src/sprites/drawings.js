@@ -1,7 +1,7 @@
-import { Sprite } from 'kontra'
+import { Sprite, Button, track } from 'kontra'
 
 const modes = {
-    NEW: 0, ADD: 1
+    NONE: 'Edit', ADD: 'Add', NEW: 'New', DELETE: 'Delete'
 }
 
 const dotSprite = {
@@ -50,7 +50,8 @@ const polygonSprite = {
     }
 }
 
-const viewSprite = {
+const drawingSprite = {
+    type: 'drawing',
     color: '#ff9999',
     width: 256,
     height: 256,
@@ -78,21 +79,33 @@ const viewSprite = {
 
     // Events
     onDown: function(event) {
+        if (!this.parent) return
         const coord = this.toCoord(event)
         let polygon
-        if (this.mode === modes.NEW) {
-            // Start a new polygon
-            polygon = Sprite(polygonSprite)
-            this.addChild(polygon)
-            this.mode = modes.ADD
-        } else if (this.mode === modes.ADD) {
-            // Add a point to the last polygon
-            polygon = this.children[this.children.length-1]
+        switch(this.parent.mode) {
+            case modes.ADD:
+                // Add a point to an existing polygon
+                polygon = this.children[this.children.length - 1]
+                if (!polygon) {
+                    polygon = Sprite(polygonSprite)
+                    this.addChild(polygon)
+                }
+                polygon.addDot(coord)
+                break
+            case modes.NEW:
+                // Start a new polygon at a point
+                polygon = Sprite(polygonSprite)
+                polygon.addDot(coord)
+                this.addChild(polygon)
+                // Set the mode to add
+                this.parent.mode = modes.ADD
+                break;
+            case modes.NONE:
+            case modes.DELETE:
+                break
+            default:
+                break
         }
-        polygon.addDot(coord)
-        
-        
-        this.selected = true
     },
     onUp: function() {
         this.selected = false
@@ -116,4 +129,97 @@ const viewSprite = {
     }
 }
 
-export { dotSprite, viewSprite }
+const modeButtonSprite = {
+    mode: modes.NONE,
+    x: 256 + 16,
+    y: 16,
+    text: {
+        text: 'text',
+        color: 'white',
+        font: '20px Arial, sans-serif',
+        textAlign: 'center',
+        y: 40,
+        width: 100,
+        height: 100
+    },
+    width: 96,
+    height: 96,
+    color: 'red',
+    onDown() {
+        if (!this.parent) return
+        this.parent.mode = this.mode
+    },
+    update() {
+        if (!this.parent) return
+        this.color = (this.mode === this.parent.mode) ? '#428bca' : '#292b2c'
+        this.text = this.mode
+    }
+}
+
+const editorObject = {
+    mode: modes.NEW,
+    update(dt) {
+        if (!this.initialized) {
+            // y o
+            // z x
+            const xView = Sprite(Object.assign({}, drawingSprite, {
+                name: 'xView',
+                x: 256,
+                y: 256
+            }))
+            this.addChild(xView)
+            
+            const yView = Sprite(Object.assign({}, drawingSprite, {
+                name: 'yView',
+                color: '#99ff99'
+            }))
+            this.addChild(yView)
+
+            const zView = Sprite(Object.assign({}, drawingSprite, {
+                name: 'zView',
+                y: 256,
+                color: '#9999ff'
+            }))
+            this.addChild(zView)
+
+            track(xView, yView, zView)
+
+            const modeNoneButton = Button(Object.assign({}, modeButtonSprite, {
+                mode: modes.NONE,
+                x: 256 + 16,
+                y: 16
+            }))
+            this.addChild(modeNoneButton)
+
+            const modeAddButton = Button(Object.assign({}, modeButtonSprite, {
+                mode: modes.ADD,
+                x: 256 + 128 + 16,
+                y: 16,
+            }))
+            this.addChild(modeAddButton)
+
+            const modeNewButton = Button(Object.assign({}, modeButtonSprite, {
+                mode: modes.NEW,
+                x: 256 + 16,
+                y: 128 + 16
+            }))
+            this.addChild(modeNewButton)
+
+            const modeDeleteButton = Button(Object.assign({}, modeButtonSprite, {
+                mode: modes.DELETE,
+                x: 256 + 128 + 16,
+                y: 128 + 16
+            }))
+            this.addChild(modeDeleteButton)
+
+
+
+            this.initialized = true
+        }
+    },
+    toObject() {
+        return this.children.filter((view) => view.type === 'drawing').map((view) => view.toObject())
+    }
+}
+
+export { dotSprite, drawingSprite, editorObject }

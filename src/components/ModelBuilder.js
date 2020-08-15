@@ -1,7 +1,7 @@
 import React from 'react';
 import { Scene, Engine, ArcRotateCamera, Vector3, HemisphericLight, Mesh, CSG, MeshBuilder, StandardMaterial } from 'babylonjs';
-import { init, Sprite, GameLoop, initPointer, track } from 'kontra'
-import { viewSprite } from '../sprites/drawings'
+import { init, GameObject, GameLoop, initPointer } from 'kontra'
+import { editorObject } from '../sprites/drawings'
 import '../styles/ModelBuilder.css'
 
 const GRID_TO_UNITS = 1 / 3
@@ -27,32 +27,10 @@ export default class ModelBuilder extends React.Component {
         init('drawCanvas')
         initPointer()
         
-        // y o
-        // z x
-        
+        const editor = GameObject(editorObject)
+        this.sprites.push(editor)
+        this.editorView = editor
 
-        const xView = Sprite(viewSprite)
-        xView.x = 256
-        xView.y = 256
-
-        // const xView = Sprite(Object.assign({}, viewSprite, {
-        //     x: 256,
-        //     y: 256
-        // }))
-        const yView = Sprite(Object.assign({}, viewSprite, {
-            color: '#99ff99'
-        }))
-        const zView = Sprite(Object.assign({}, viewSprite, {
-            y: 256,
-            color: '#9999ff'
-        }))
-
-        track(xView, yView, zView)
-
-        this.sprites.push(xView, yView, zView)
-        this.editorViews = {
-            xView, yView, zView
-        }
         // The KontraJS GameLoop
         this.loop = GameLoop({
             update: (dt) => this.sprites.forEach((s) => s.update()),
@@ -70,8 +48,7 @@ export default class ModelBuilder extends React.Component {
         
         const createScene = () => {
             const scene = new Scene(this.engine)
-            const camera = new ArcRotateCamera('camera1', 0, Math.PI / 4, 24, Vector3.Zero(), scene)
-            camera.setTarget(Vector3.Zero())
+            const camera = new ArcRotateCamera('camera1', 0, Math.PI / 4, 24, new Vector3(0, 4, 0), scene)
             camera.attachControl(renderCanvas, false)
             // const sphere = Mesh.CreateSphere('sphere1', 16, 2, scene, false, Mesh.FRONTSIDE);
             // sphere.position.y = 1;
@@ -89,30 +66,23 @@ export default class ModelBuilder extends React.Component {
 
     renderModel() {
         if (this.mesh) this.mesh.dispose()
-        // TODO: Gather the 3 axis canvases
-        // TODO: Build and render a babylonjs model
-        const xPolygons = this.editorViews.xView.toObject()
-        const yPolygons = this.editorViews.yView.toObject()
-        const zPolygons = this.editorViews.zView.toObject()
-        
-        const model = [xPolygons, zPolygons, yPolygons]
-        
-        // Make 3 models by extruding each drawing
-        const mesh = this.createModel(model, this.shapeMat, this.scene)
-        mesh.position.y = 4
+        const drawings = this.editorView.toObject()
+        const mesh = this.createModel(drawings, this.shapeMat, this.scene)
+
+        mesh.position = new Vector3(0, 4, 0)
         mesh.scaling = new Vector3(8, 8, 8)
         this.mesh = mesh
         
         this.setState({
-            'renderOutput': JSON.stringify(model)
+            'renderOutput': JSON.stringify(drawings)
         })
     }
 
-    createModel(shapes, shapeMat, scene) {
+    createModel(drawings, shapeMat, scene) {
         var axes = ['x', 'z', 'y']
         var shapeMeshes = []
         // Make a mesh from each of the shapes
-        shapes.forEach((shape, i) => {
+        drawings.forEach((shape, i) => {
             var shapeMesh = this.createShapeMesh(shape, axes[i], scene)
             shapeMeshes.push(shapeMesh)
         })
