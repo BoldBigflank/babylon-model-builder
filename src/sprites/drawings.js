@@ -15,7 +15,12 @@ const dotSprite = {
     height: 12,
     onDown() {
         this.selected = true
-        this.parent.dragging = true
+        if (this.parent.parent.parent.mode === modes.DELETE) {
+            this.parent.removeChild(this)
+            this.ttl = 0
+        } else {
+            this.parent.dragging = true
+        }
     },
     onOver() {
         console.log('onOver')
