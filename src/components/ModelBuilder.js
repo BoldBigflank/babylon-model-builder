@@ -1,6 +1,6 @@
 import React from 'react';
 import { Scene, Engine, ArcRotateCamera, Vector3, HemisphericLight, Mesh, CSG, MeshBuilder, StandardMaterial } from 'babylonjs';
-import { init, GameObject, GameLoop, initPointer } from 'kontra'
+import { init, GameObject, GameLoop, initPointer, initKeys } from 'kontra'
 import { editorObject } from '../sprites/drawings'
 import '../styles/ModelBuilder.css'
 
@@ -26,6 +26,7 @@ export default class ModelBuilder extends React.Component {
         // Start KontraJS stuff
         init('drawCanvas')
         initPointer()
+        initKeys()
         
         const editor = GameObject(editorObject)
         this.sprites.push(editor)

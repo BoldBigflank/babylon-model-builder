@@ -19,3 +19,8 @@ canvas#drawCanvas {
     display: block;
     width: 100%;
 }
+
+textarea {
+    width: 100%;
+    max-width:640px;
+}
