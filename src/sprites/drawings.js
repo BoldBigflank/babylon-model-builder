@@ -1,7 +1,7 @@
-import { Sprite, Button, track, bindKeys } from 'kontra'
+import { Sprite, Button, track, untrack, bindKeys, on, emit } from 'kontra'
 
 const modes = {
-    NONE: 'Edit', ADD: 'Add', NEW: 'New', DELETE: 'Delete'
+    NONE: 'Edit', ADD: 'Add', NEW: 'New', DELETE: 'Del'
 }
 
 // const GRID_COLORS = ['#000000', '#333333', '#666666', '#999999', '#cccccc', '#ffffff']
@@ -14,23 +14,15 @@ const dotSprite = {
     width: 12,
     height: 12,
     onDown() {
-        this.selected = true
-        if (this.parent.parent.parent.mode === modes.DELETE) {
-            this.parent.removeChild(this)
-            this.ttl = 0
-        } else {
-            this.parent.dragging = true
-        }
-    },
-    onOver() {
-        console.log('onOver')
+        emit('dot:clicked', this)
+        this.parent.dragging = true
     },
     onUp() {
-        this.selected = false
+        this.parent.dragging = false
     },
 
     // Overrides
-    collidesWithPointer: function (pointer) {
+    collidesWithPointer(pointer) {
         if (this.parent.dragging) return false
         const { anchor } = this
         const { x, y, width, height } = this.world
@@ -48,7 +40,7 @@ const dotSprite = {
             this.x = Math.floor((this.x + 8) / 16) * 16
             this.y = Math.floor((this.y + 8) / 16) * 16
         }
-        this.color = (this.last && this.parent.last) ? '#f0ad4e' : '#ffffff'
+        this.color = (this.selected) ? '#f0ad4e' : '#ffffff'
     }
 }
 
@@ -58,27 +50,52 @@ const polygonSprite = {
     x: 0,
     y: 0,
     addDot(coord) {
-        this.children.filter((child) => child.type === 'dot').forEach((dot) => dot.last = false)
+        // find the selected dot before adding one
+        const selectedDotIndex = this.children.findIndex((child) => child.type === 'dot' && child.selected)
         const dot = Sprite(dotSprite)
         this.addChild(dot)
+        const dotIndex = this.children.findIndex((child) => child === dot)
         dot.x = coord.x
         dot.y = coord.y
-        if (this.last) dot.last = true
+        // if (this.last) dot.last = true
         // else add dot to the current one
         track(dot)
+
+        // Rearrange the children so that dot's after the selected one
+        if (selectedDotIndex !== -1 && dotIndex > 0) {
+            this.children.splice(dotIndex, 1)
+            this.children.splice(selectedDotIndex + 1, 0, dot)
+        }
+
         return dot
     },
+
+    selectDot(selectedDot) {
+        this.children
+            .filter((child) => child.type === 'dot')
+            .forEach((dot) => {
+                dot.selected = (dot === selectedDot)
+            })
+    },
+
+    hasSelected() {
+        const dot = this.children.find((child) => child.type === 'dot' && child.selected)
+        return (dot !== undefined)
+    },
+    
     moveSelected(coord) {
         const { x, y } = coord
-        this.children.filter((child) => child.type === 'dot' && child.selected).forEach((dot) => {
-            dot.x = x
-            dot.y = y
-        })
+        this.children
+            .filter((child) => child.type === 'dot' && child.selected)
+            .forEach((dot) => {
+                dot.x = x
+                dot.y = y
+            })
     },
     moveEnded() {
-        this.children.filter((child) => child.type === 'dot').forEach((dot) => {
-            dot.selected = false
-        })
+        // this.children.filter((child) => child.type === 'dot').forEach((dot) => {
+        //     dot.selected = false
+        // })
         this.dragging = false
     },
     toObject() {
@@ -125,7 +142,7 @@ const drawingSprite = {
     mode: modes.NEW,
     gridDistance: 16,
     // helper functions
-    toCoord: function (event) {
+    toCoord(event) {
         const rect = event.target.getBoundingClientRect()
         // x, y, width, height, top, right, bottom, left
         return {
@@ -134,15 +151,25 @@ const drawingSprite = {
         }
     },
 
-    addPolygon: function() {
-        this.children.filter((child) => child.type === 'polygon').forEach((polygon) => polygon.last = false)
+    addPolygon() {
+        this.children
+            .filter((child) => child.type === 'polygon')
+            .forEach((polygon) => polygon.last = false)
         const polygon = Sprite(polygonSprite)
         polygon.last = true
         this.addChild(polygon)
         return polygon
     },
+    
+    selectDot(selectedDot) {
+        this.children
+            .filter((child) => child.type === 'polygon')
+            .forEach((polygon) => {
+                polygon.selectDot(selectedDot)
+            })
+    },
 
-    toObject: function() {
+    toObject() {
         const polygons = this.children.filter((child) => child.type === 'polygon').map((polygon) => {
             return polygon.toObject()
         })
@@ -153,23 +180,24 @@ const drawingSprite = {
     },
 
     // Events
-    onDown: function(event) {
+    onDown(event) {
         if (!this.parent) return
         const coord = this.toCoord(event)
         let polygon
         switch(this.parent.mode) {
             case modes.ADD:
                 // Add a point to an existing polygon
-                polygon = this.children[this.children.length - 1]
+                polygon = this.children
+                    .find((child) => child.type === 'polygon' && child.hasSelected())
                 if (!polygon) {
                     polygon = this.addPolygon()
                 }
-                polygon.addDot(coord)
+                emit('dot:clicked', polygon.addDot(coord))
                 break
             case modes.NEW:
                 // Start a new polygon at a point
                 polygon = this.addPolygon()
-                polygon.addDot(coord)
+                emit('dot:clicked', polygon.addDot(coord))
                 // Set the mode to add
                 this.parent.mode = modes.ADD
                 break;
@@ -181,24 +209,24 @@ const drawingSprite = {
         }
     },
 
-    onUp: function() {
+    onUp() {
         this.children.filter((view) => view.type === 'polygon').forEach((polygon) => {
             polygon.moveEnded()
         })
     },
-    onOver: function(event) {
+    onOver(event) {
         const coord = this.toCoord(event)
         // Move any selected dots to the cursor
-        this.children.filter((view) => view.type === 'polygon').forEach((polygon) => {
-            polygon.moveSelected(coord)
-        })
+        this.children.filter((view) => view.type === 'polygon' && view.dragging)
+            .forEach((polygon) => {
+                polygon.moveSelected(coord)
+            })
     },
-    onOut: function() {
+    onOut() {
         this.children.filter((view) => view.type === 'polygon').forEach((polygon) => {
             polygon.moveEnded()
         })
     },
-
 
     // Overrides
     render(dt) {
@@ -223,7 +251,7 @@ const drawingSprite = {
         }
         context.restore()
     },
-    collidesWithPointer: function (pointer) {
+    collidesWithPointer(pointer) {
         return (
             pointer.x > this.x &&
             pointer.y > this.y &&
@@ -240,14 +268,14 @@ const modeButtonSprite = {
     text: {
         text: 'text',
         color: 'white',
-        font: '20px Arial, sans-serif',
+        font: '18px Arial, sans-serif',
         textAlign: 'center',
-        y: 40,
-        width: 100,
+        y: 24,
+        width: 60,
         height: 100
     },
-    width: 96,
-    height: 96,
+    width: 60,
+    height: 60,
     color: 'red',
     onDown() {
         if (!this.parent) return
@@ -266,15 +294,7 @@ const editorObject = {
         if (!this.initialized) {
             // y o
             // z x
-            const xView = Sprite({
-                ...drawingSprite,
-                name: 'xView',
-                x: 256,
-                y: 256
-            })
-            this.addChild(xView)
-            
-            const zView = Sprite({
+            const zView = Sprite({ // Front
                 ...drawingSprite,
                 name: 'zView',
                 y: 256,
@@ -282,7 +302,15 @@ const editorObject = {
             })
             this.addChild(zView)
             
-            const yView = Sprite({
+            const xView = Sprite({ // Side
+                ...drawingSprite,
+                name: 'xView',
+                x: 256,
+                y: 256
+            })
+            this.addChild(xView)
+            
+            const yView = Sprite({ // Top
                 ...drawingSprite,
                 name: 'yView',
                 color: '#99ff99'
@@ -294,7 +322,7 @@ const editorObject = {
             const modeNewButton = Button({
                 ...modeButtonSprite,
                 mode: modes.NEW,
-                x: 256 + 16,
+                x: 256 + 8,
                 y: 16
             })
             this.addChild(modeNewButton)
@@ -302,7 +330,7 @@ const editorObject = {
             const modeAddButton = Button({
                 ...modeButtonSprite,
                 mode: modes.ADD,
-                x: 256 + 128 + 16,
+                x: 256 + 60 + 8,
                 y: 16,
             })
             this.addChild(modeAddButton)
@@ -310,16 +338,16 @@ const editorObject = {
             const modeNoneButton = Button({
                 ...modeButtonSprite,
                 mode: modes.NONE,
-                x: 256 + 16,
-                y: 128 + 16
+                x: 256 + 120 + 8,
+                y: 16
             })
             this.addChild(modeNoneButton)
 
             const modeDeleteButton = Button({
                 ...modeButtonSprite,
                 mode: modes.DELETE,
-                x: 256 + 128 + 16,
-                y: 128 + 16
+                x: 256 + 180 + 8,
+                y: 16
             })
             this.addChild(modeDeleteButton)
 
@@ -341,6 +369,21 @@ const editorObject = {
                         break
 
                 }
+            })
+
+            // Child Events
+            on('dot:clicked', (dot) => {
+                if (this.mode === modes.DELETE) {
+                    untrack(dot)
+                    
+                    dot.parent.removeChild(dot)
+                    dot.ttl = 0
+                } else {
+                    this.children
+                        .filter((view) => view.type === 'drawing')
+                        .forEach(drawing => drawing.selectDot(dot))
+                }
+
             })
 
             this.initialized = true
