@@ -15,7 +15,6 @@ const dotSprite = {
     height: 12,
     onDown() {
         emit('dot:clicked', this)
-        this.parent.dragging = true
     },
     onUp() {
         this.parent.dragging = false
@@ -36,11 +35,17 @@ const dotSprite = {
         )
     },
     update() {
-        if (!this.selected) {
+        if (!this.parent.dragging) {
             this.x = Math.floor((this.x + 8) / 16) * 16
             this.y = Math.floor((this.y + 8) / 16) * 16
         }
         this.color = (this.selected) ? '#f0ad4e' : '#ffffff'
+    },
+    toObject() {
+        return [
+            Math.floor(this.x / 4),
+            Math.floor(64 - (this.y / 4))
+        ]
     }
 }
 
@@ -49,10 +54,15 @@ const polygonSprite = {
     last: false,
     x: 0,
     y: 0,
+    getDots() {
+        return this.children.filter((child) => child.type === 'dot')
+    },
     addDot(coord) {
         // find the selected dot before adding one
         const selectedDotIndex = this.children.findIndex((child) => child.type === 'dot' && child.selected)
-        const dot = Sprite(dotSprite)
+        const dot = Sprite({
+            ...dotSprite
+        })
         this.addChild(dot)
         const dotIndex = this.children.findIndex((child) => child === dot)
         dot.x = coord.x
@@ -76,6 +86,7 @@ const polygonSprite = {
             .forEach((dot) => {
                 dot.selected = (dot === selectedDot)
             })
+        this.dragging = true
     },
 
     hasSelected() {
@@ -99,11 +110,7 @@ const polygonSprite = {
         this.dragging = false
     },
     toObject() {
-        const points = this.children.map((dot) => {
-            return [
-                256 - dot.x, 256 - dot.y
-            ]
-        })
+        const points = this.children.map((dot) => dot.toObject())
         return points
     },
     render(dt) {
@@ -142,6 +149,9 @@ const drawingSprite = {
     mode: modes.NEW,
     gridDistance: 16,
     // helper functions
+    getPolygons() {
+        return this.children.filter((child) => child.type === 'polygon')
+    },
     toCoord(event) {
         const rect = event.target.getBoundingClientRect()
         // x, y, width, height, top, right, bottom, left
@@ -170,13 +180,12 @@ const drawingSprite = {
     },
 
     toObject() {
-        const polygons = this.children.filter((child) => child.type === 'polygon').map((polygon) => {
+        const polygons = this.getPolygons().map((polygon) => {
             return polygon.toObject()
         })
-        return {
-            mirror: this.mirror,
-            polygons
-        }
+        const object = { polygons }
+        if (this.mirror) object.mirror = true
+        return object
     },
 
     // Events
@@ -294,14 +303,11 @@ const editorObject = {
         if (!this.initialized) {
             // y o
             // z x
-            const zView = Sprite({ // Front
-                ...drawingSprite,
-                name: 'zView',
-                y: 256,
-                color: '#9999ff'
-            })
-            this.addChild(zView)
             
+            // I imagine the y is looking in the direction of -y
+            // I imagine the x is looking in the direction of -x
+            // I imagine the z is looking in the direction of +z
+
             const xView = Sprite({ // Side
                 ...drawingSprite,
                 name: 'xView',
@@ -317,6 +323,14 @@ const editorObject = {
             })
             this.addChild(yView)
 
+            const zView = Sprite({ // Front
+                ...drawingSprite,
+                name: 'zView',
+                y: 256,
+                color: '#9999ff'
+            })
+            this.addChild(zView)
+            
             track(xView, yView, zView)
 
             const modeNewButton = Button({
@@ -375,8 +389,10 @@ const editorObject = {
             on('dot:clicked', (dot) => {
                 if (this.mode === modes.DELETE) {
                     untrack(dot)
-                    
-                    dot.parent.removeChild(dot)
+                    const polygon = dot.parent
+                    polygon.removeChild(dot)
+                    if (polygon.getDots().length === 0)
+                    polygon.parent.removeChild(polygon)
                     dot.ttl = 0
                 } else {
                     this.children
@@ -390,8 +406,12 @@ const editorObject = {
         }
         
     },
+    getDrawings() {
+        return this.children.filter((view) => view.type === 'drawing')
+    },
     toObject() {
-        return this.children.filter((view) => view.type === 'drawing').map((view) => view.toObject())
+        const object = this.getDrawings().map((drawing) => drawing.toObject())
+        return object
     }
 }
 

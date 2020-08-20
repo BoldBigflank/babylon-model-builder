@@ -1,7 +1,7 @@
 import React from 'react';
 import { Scene, Engine, ArcRotateCamera, Vector3, HemisphericLight, Mesh, CSG, MeshBuilder, StandardMaterial } from 'babylonjs';
 import { init, GameObject, GameLoop, initPointer, initKeys } from 'kontra'
-import { editorObject } from '../sprites/drawings'
+import { editorObject } from './ModelBuilderSprites'
 import '../styles/ModelBuilder.css'
 
 const GRID_TO_UNITS = 1 / 3
@@ -49,12 +49,20 @@ export default class ModelBuilder extends React.Component {
         
         const createScene = () => {
             const scene = new Scene(this.engine)
-            const camera = new ArcRotateCamera('camera1', 0, Math.PI / 4, 24, new Vector3(0, 4, 0), scene)
+            const camera = new ArcRotateCamera('camera1',
+             0, // a
+             Math.PI / 4, // b
+             24, // radius
+             new Vector3(0, 4, 0), scene) // target
             camera.attachControl(renderCanvas, false)
-            // const sphere = Mesh.CreateSphere('sphere1', 16, 2, scene, false, Mesh.FRONTSIDE);
-            // sphere.position.y = 1;
+            const sphere = Mesh.CreateSphere('sphere1', 16, 2, scene, false, Mesh.FRONTSIDE);
+            sphere.position.x = 4;
             new HemisphericLight('light1', Vector3.Up(), scene)
             Mesh.CreateGround('ground1', 6, 6, 2, scene, false);
+
+            // create a red box at 1, 0, 0
+            // Create a green box at 0, 1, 0
+            // create a blue box at 0, 0, 1
             return scene;
         }
         
@@ -68,7 +76,8 @@ export default class ModelBuilder extends React.Component {
     renderModel() {
         if (this.mesh) this.mesh.dispose()
         const drawings = this.editorView.toObject()
-        const mesh = this.createModel(drawings, this.shapeMat, this.scene)
+        const mesh = this.intersectDrawings(drawings, this.shapeMat)
+        this.scene.addMesh(mesh)
 
         mesh.position = new Vector3(0, 4, 0)
         mesh.scaling = new Vector3(8, 8, 8)
@@ -79,65 +88,71 @@ export default class ModelBuilder extends React.Component {
         })
     }
 
-    createModel(drawings, shapeMat, scene) {
-        var axes = ['x', 'z', 'y']
-        var shapeMeshes = []
+    // Input an array of polygons, an axis and a scene
+    // Return a Mesh made by extruding each polygon along that axis
+    extrudePolygons = (polygons) => {
+        const meshes = []
+        // Assume a max grid size of 64x64
+
+        // Make a path from 0.5 to -0.5 on the given axis
+        // Reversed on x and y so we draw top down view
+        // and right side view
+        const path = [
+            scaledVector3(0, 0, -1, 1 / 2),
+            scaledVector3(0, 0, 1, 1 / 2)
+        ]
+
+        polygons.forEach((polygon, i) => {
+            const shape = polygon.map((point) => {
+                const [x, y] = point
+                const z = 0
+                return scaledVector3(x - 32, y - 32, z, 1 / 64) // Normalize the polygon
+            })
+            shape.push(shape[0])
+
+            const extrusion = MeshBuilder.ExtrudeShape('star', {
+                shape,
+                path,
+                cap: Mesh.CAP_ALL,
+                updatable: true
+            })
+            meshes.push(extrusion)
+        })
+        // Merge the meshes
+        const newMesh = Mesh.MergeMeshes(meshes, true)
+        return newMesh
+    }
+
+    // Input an array of drawings, a material and a scene
+    // Return a Mesh made by intersecting the meshes made by extruding each drawing
+    intersectDrawings = (drawings, shapeMat) => {
+        const axes = ['x', 'y', 'z']
+        const extrudeMeshes = []
         // Make a mesh from each of the shapes
-        drawings.forEach((shape, i) => {
-            var shapeMesh = this.createShapeMesh(shape, axes[i], scene)
-            shapeMeshes.push(shapeMesh)
+        drawings.forEach((drawing, i) => {
+            const extrudeMesh = this.extrudePolygons(drawing.polygons)
+            // Rotate based on the axis we're making
+            if (axes[i] === 'x') extrudeMesh.rotate(Vector3.Up(), -Math.PI / 2)
+            if (axes[i] === 'y') extrudeMesh.rotate(Vector3.Right(), Math.PI / 2)
+            
+            extrudeMeshes.push(extrudeMesh)
         })
         // Make CSG from each
         // Combine using intersect
         let resultCSG = null
-        shapeMeshes.forEach((shapeMesh) => {
-            let shapeCSG = CSG.FromMesh(shapeMesh)
+        extrudeMeshes.forEach((extrudeMesh) => {
+            const shapeCSG = CSG.FromMesh(extrudeMesh)
             if (!resultCSG) resultCSG = shapeCSG
             else {
                 resultCSG.intersectInPlace(shapeCSG)
             }
         })
 
-        const resultMesh = resultCSG.toMesh('Result-Mesh', shapeMat, scene, true)
-        shapeMeshes.forEach((mesh) => mesh.dispose())
+        const resultMesh = resultCSG.toMesh('Result-Mesh', shapeMat, null, true)
+        extrudeMeshes.forEach((mesh) => mesh.dispose())
         return resultMesh
     }
 
-    createShapeMesh = (shapeObject, axis, scene) => {
-        let puzzle = shapeObject.polygons
-        axis = axis || 'y'
-        let meshes = []
-        // Assume a max grid size of 32x32
-
-        // Make a path from -0.5 to 0.5 on the given axis
-        let path = []
-        let pathX = (axis === 'x') ? 1 : 0
-        let pathY = (axis === 'y') ? 1 : 0
-        let pathZ = (axis === 'z') ? 1 : 0
-        path.push(scaledVector3(-pathX, -pathY, -pathZ, 1 / 2))
-        path.push(scaledVector3(pathX, pathY, pathZ, 1 / 2))
-
-        puzzle.forEach((puzzleShape) => {
-            let shape = []
-            puzzleShape.push(puzzleShape[0]) // Add the first to the end
-            puzzleShape.forEach((point) => {
-                const [x, y] = point
-                let z = 1
-                shape.push(scaledVector3(x - 128, y - 128, z, 1 / 256))
-            })
-            var extrusion = MeshBuilder.ExtrudeShape("star", {
-                shape: shape,
-                path: path,
-                cap: Mesh.CAP_ALL,
-                updatable: true
-            }, scene);
-            meshes.push(extrusion)
-        })
-        // Merge the meshes
-        var newMesh = Mesh.MergeMeshes(meshes, true);
-        // newMesh.scaling = 32
-        return newMesh
-    }
 
     render() {
         return (
