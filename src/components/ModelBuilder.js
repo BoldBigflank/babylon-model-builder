@@ -80,6 +80,7 @@ export default class ModelBuilder extends React.Component {
     renderModel() {
         if (this.mesh) this.mesh.dispose()
         const modelObject = this.editorView.toObject()
+        const renderOutput = JSON.stringify(modelObject)
         // Check the model
 
         const mesh = this.intersectDrawings(modelObject, this.shapeMat)
@@ -92,7 +93,7 @@ export default class ModelBuilder extends React.Component {
         }
         
         this.setState({
-            'renderOutput': JSON.stringify(modelObject)
+            renderOutput
         })
     }
 
