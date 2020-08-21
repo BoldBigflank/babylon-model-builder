@@ -1,5 +1,5 @@
 import React from 'react';
-import { Scene, Engine, ArcRotateCamera, Vector3, HemisphericLight, Mesh, CSG, MeshBuilder, StandardMaterial } from 'babylonjs';
+import { Scene, Engine, ArcRotateCamera, Vector3, Color3, HemisphericLight, Mesh, CSG, MeshBuilder, StandardMaterial } from 'babylonjs';
 import { init, GameObject, GameLoop, initPointer, initKeys } from 'kontra'
 import { editorObject } from './ModelBuilderSprites'
 import '../styles/ModelBuilder.css'
@@ -29,6 +29,7 @@ export default class ModelBuilder extends React.Component {
         initKeys()
         
         const editor = GameObject(editorObject)
+        editor.ModelUpdated = () => {this.renderModel()}
         this.sprites.push(editor)
         this.editorView = editor
 
@@ -50,41 +51,48 @@ export default class ModelBuilder extends React.Component {
         const createScene = () => {
             const scene = new Scene(this.engine)
             const camera = new ArcRotateCamera('camera1',
-             0, // a
+             Math.PI * 3 / 2, // a
              Math.PI / 4, // b
              24, // radius
              new Vector3(0, 4, 0), scene) // target
             camera.attachControl(renderCanvas, false)
             const sphere = Mesh.CreateSphere('sphere1', 16, 2, scene, false, Mesh.FRONTSIDE);
             sphere.position.x = 4;
-            new HemisphericLight('light1', Vector3.Up(), scene)
-            Mesh.CreateGround('ground1', 6, 6, 2, scene, false);
+            const light = new HemisphericLight('light1', Vector3.Up(), scene)
+            light.diffuse = new Color3(1, 0.9, 0.8);
+            light.specular = new Color3(1, 1, 1);
+            light.groundColor = new Color3(.3, .2, .1);
+            const ground = Mesh.CreateGround('ground1', 6, 6, 2, scene, false);
+            ground.material = this.groundMat
 
-            // create a red box at 1, 0, 0
-            // Create a green box at 0, 1, 0
-            // create a blue box at 0, 0, 1
             return scene;
         }
         
         const scene = createScene()
         this.scene = scene
         this.shapeMat = new StandardMaterial("Material-Shape", scene);
+        this.groundMat = new StandardMaterial("Material-Ground", scene);
+        this.groundMat.diffuseColor = new Color3(.3, .2, .1)
 
         this.engine.runRenderLoop(() => scene.render())
     }
 
     renderModel() {
         if (this.mesh) this.mesh.dispose()
-        const drawings = this.editorView.toObject()
-        const mesh = this.intersectDrawings(drawings, this.shapeMat)
-        this.scene.addMesh(mesh)
+        const modelObject = this.editorView.toObject()
+        // Check the model
 
-        mesh.position = new Vector3(0, 4, 0)
-        mesh.scaling = new Vector3(8, 8, 8)
-        this.mesh = mesh
+        const mesh = this.intersectDrawings(modelObject, this.shapeMat)
+        if (mesh) {
+            this.scene.addMesh(mesh)
+    
+            mesh.position = new Vector3(0, 4, 0)
+            mesh.scaling = new Vector3(8, 8, 8)
+            this.mesh = mesh
+        }
         
         this.setState({
-            'renderOutput': JSON.stringify(drawings)
+            'renderOutput': JSON.stringify(modelObject)
         })
     }
 
@@ -102,7 +110,7 @@ export default class ModelBuilder extends React.Component {
             scaledVector3(0, 0, 1, 1 / 2)
         ]
 
-        polygons.forEach((polygon, i) => {
+        polygons.forEach((polygon) => {
             const shape = polygon.map((point) => {
                 const [x, y] = point
                 const z = 0
@@ -125,11 +133,27 @@ export default class ModelBuilder extends React.Component {
 
     // Input an array of drawings, a material and a scene
     // Return a Mesh made by intersecting the meshes made by extruding each drawing
-    intersectDrawings = (drawings, shapeMat) => {
+    intersectDrawings = (modelObject, shapeMat) => {
+        const { drawings, color } = modelObject
+        const [ r, g, b ] = color.split(',')
+        shapeMat.diffuseColor = new Color3(r, g, b)
         const axes = ['x', 'y', 'z']
         const extrudeMeshes = []
         // Make a mesh from each of the shapes
         drawings.forEach((drawing, i) => {
+            if (!drawing.polygons.length) return // Don't extrude meshes
+            if (drawing.mirror) {
+                const mirrorPolygons = []
+                drawing.polygons.forEach((polygon) => {
+                    const mirrorPolygon = []
+                    for (let i = polygon.length - 1; i >= 0; i--) {
+                        const [x, y] = polygon[i]
+                        mirrorPolygon.push([64 - x, y])
+                    }
+                    mirrorPolygons.push(mirrorPolygon)
+                })
+                drawing.polygons.push(...mirrorPolygons)
+            }
             const extrudeMesh = this.extrudePolygons(drawing.polygons)
             // Rotate based on the axis we're making
             if (axes[i] === 'x') extrudeMesh.rotate(Vector3.Up(), -Math.PI / 2)
@@ -137,6 +161,7 @@ export default class ModelBuilder extends React.Component {
             
             extrudeMeshes.push(extrudeMesh)
         })
+        if (!extrudeMeshes.length) return
         // Make CSG from each
         // Combine using intersect
         let resultCSG = null
@@ -166,7 +191,6 @@ export default class ModelBuilder extends React.Component {
                     <div className="canvasContainer">
                         <canvas id="renderCanvas" width={512} height={512} ></canvas>
                     </div>
-                    <button onClick={() => this.renderModel()}>Render</button>
                 </div>
                 <div className="Output">
                     <p>Output</p>
