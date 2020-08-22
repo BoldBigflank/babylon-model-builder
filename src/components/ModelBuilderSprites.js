@@ -269,22 +269,14 @@ const drawingSprite = {
             }
         }
         context.restore()
-    },
-    collidesWithPointer(pointer) {
-        return (
-            pointer.x > this.x &&
-            pointer.y > this.y &&
-            pointer.x < this.x + this.width &&
-            pointer.y < this.y + this.height
-        )
     }
 }
 
 const colorPickerSprite = {
     type: 'colorPicker',
-    r: 255, 
-    g: 255,
-    b: 255,
+    r: 256, 
+    g: 256,
+    b: 256,
     width: 256,
     height: 128,
     color: '#333',

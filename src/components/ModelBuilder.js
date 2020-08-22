@@ -25,7 +25,8 @@ export default class ModelBuilder extends React.Component {
     componentDidMount() {
         // Start KontraJS stuff
         init('drawCanvas')
-        initPointer()
+        const pointer = initPointer()
+        pointer.radius = .1
         initKeys()
         
         const editor = GameObject(editorObject)
