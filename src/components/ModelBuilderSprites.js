@@ -36,8 +36,9 @@ const dotSprite = {
     },
     update() {
         if (!this.parent.dragging) {
-            this.x = Math.floor((this.x + 8) / 16) * 16
-            this.y = Math.floor((this.y + 8) / 16) * 16
+            // Snap to the nearest 4
+            this.x = Math.floor((this.x + 2) / 4) * 4
+            this.y = Math.floor((this.y + 2) / 4) * 4
         }
         this.color = (this.selected) ? '#f0ad4e' : '#ffffff'
     },
